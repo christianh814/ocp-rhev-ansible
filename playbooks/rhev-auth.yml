@@ -1,0 +1,8 @@
+---
+  - name: Get RHEVM Auth
+    ovirt_auth:
+      url: https://rhevm.cloud.chx/ovirt-engine/api
+      username: admin@internal
+      password: "{{ lookup('env','OVIRT_PASSWORD') }}"
+      insecure: true
+      state: present

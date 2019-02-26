@@ -1,0 +1,86 @@
+#---------------------------------------------------------------------
+# Global settings
+#---------------------------------------------------------------------
+global
+    maxconn     20000
+    log         /dev/log local0 info
+    chroot      /var/lib/haproxy
+    pidfile     /var/run/haproxy.pid
+    user        haproxy
+    group       haproxy
+    daemon
+
+    # turn on stats unix socket
+    stats socket /var/lib/haproxy/stats
+
+#---------------------------------------------------------------------
+# common defaults that all the 'listen' and 'backend' sections will
+# use if not designated in their block
+#---------------------------------------------------------------------
+defaults
+    mode                    http
+    log                     global
+    option                  httplog
+    option                  dontlognull
+#    option http-server-close
+    option forwardfor       except 127.0.0.0/8
+    option                  redispatch
+    retries                 3
+    timeout http-request    10s
+    timeout queue           1m
+    timeout connect         10s
+    timeout client          300s
+    timeout server          300s
+    timeout http-keep-alive 10s
+    timeout check           10s
+    maxconn                 20000
+
+listen stats
+    bind :9000
+    mode http
+    stats enable
+    stats uri /
+
+frontend  atomic-openshift-api
+    bind *:8443
+    default_backend atomic-openshift-api
+    mode tcp
+    option tcplog
+
+backend atomic-openshift-api
+    balance source
+    mode tcp
+{% for master in ovirt_vms if master.name.startswith('master') %}
+    server      master{{ loop.index }} {{ master | ovirtvmipv4 }}:8443 check
+{% endfor %}
+
+# Router Config
+
+frontend router-http
+    bind *:80
+    default_backend router-backend-http
+
+frontend router-https
+    bind *:443
+    mode tcp
+    option tcplog
+    default_backend router-backend-https
+
+backend router-backend-http
+    balance source
+    mode http
+    option httpclose
+    option forwardfor
+{% for infra in ovirt_vms if infra.name.startswith('infra') %}
+    server      infra{{ loop.index }} {{ infra | ovirtvmipv4 }}:80 check
+{% endfor %}
+
+backend router-backend-https
+    mode tcp
+    balance source
+{% for infra in ovirt_vms if infra.name.startswith('infra') %}
+    server      infra{{ loop.index }} {{ infra | ovirtvmipv4 }}:443 check
+{% endfor %}
+
+##
+##

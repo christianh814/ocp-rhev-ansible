@@ -1,0 +1,28 @@
+---
+  - name: Adding "{{ lb_fqdn }}" to the inventory
+    add_host:
+      name: "{{ lb_fqdn }}"
+
+  - name: Obtain OCP vm information
+    ovirt_vm_facts:
+      auth: "{{ ovirt_auth }}"
+      pattern: name=master* or name=infra* or name=app* and cluster=Default
+      fetch_nested: true
+      nested_attributes: ips
+
+  - name: Set Template config to defined HAProxy LB "{{ lb_fqdn }}"
+    template:
+      src: ../templates/haproxy.cfg.j2
+      dest: /etc/haproxy/haproxy.cfg
+      owner: root
+      group: root
+      mode: 0644
+    delegate_to: "{{ lb_fqdn }}"
+
+  - name: Best effort selinux config set on "{{ lb_fqdn }}"
+    shell: "restorecon -vR /etc/haproxy/haproxy.cfg  || true"
+    delegate_to: "{{ lb_fqdn }}"
+
+  - name: Hackly restart haproxy on "{{ lb_fqdn }}"
+    shell: "systemctl restart haproxy"
+    delegate_to: "{{ lb_fqdn }}"

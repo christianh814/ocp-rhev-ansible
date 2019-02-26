@@ -1,0 +1,29 @@
+---
+- hosts: all
+  tasks:
+
+  - import_tasks: rhev-auth.yml
+
+  - name: Delete VM
+    ovirt_vm:
+      auth: "{{ ovirt_auth }}"
+      name: "{{ item }}"
+      state: absent
+      cluster: Default
+      wait: true
+    with_items:
+      - master1
+      - master2
+      - master3
+      - infra1
+      - infra2
+      - infra3
+      - app1
+      - app2
+      - app3
+      - lb
+
+  - name: Remove generated inventory file
+    shell: rm -f ../output_files/generated_inventory.ini
+##
+##

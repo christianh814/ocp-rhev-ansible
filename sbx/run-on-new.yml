@@ -1,0 +1,15 @@
+---
+- hosts: all
+  vars:
+    myhost: "192.168.122.206"
+  tasks:
+
+  - name: Add host NOT in the inventory
+    add_host:
+      name: "{{ myhost }}"
+
+  - name: Copy a file to this new host "{{ myhost }}"
+    copy:
+      src: ../templates/generated_inventory.j2
+      dest: /root/myfile.j2
+    delegate_to: "{{ myhost }}"

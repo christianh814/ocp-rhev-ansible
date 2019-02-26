@@ -1,0 +1,143 @@
+---
+- hosts: all
+  vars:
+    wildcard_domain: "osa.cloud.chx"
+    console_fqdn: "openshift.cloud.chx"
+    zone_fwd: "cloud.chx"
+  tasks:
+
+  - import_tasks: rhev-auth.yml
+ 
+  - name: Create VMs for OpenShift
+    ovirt_vm:
+      auth: "{{ ovirt_auth }}"
+      name: "{{ item }}"
+      comment: This is {{ item }} for the OCP cluster
+      state: running
+      cluster: Default
+      template: rhel-7.6-template
+      memory: 16GiB
+      memory_max: 24GiB
+      memory_guaranteed: 12GiB
+      cpu_threads: 2
+      cpu_cores: 2
+      cpu_sockets: 1
+      type: server
+      operating_system: rhel_7x64
+      nics:
+      - name: nic1
+        profile_name: ovirtmgmt
+      wait: true
+    with_items:
+      - master1
+      - app1
+      - app2
+      - app3
+  
+  - name:  Attach OCS disk to VM 
+    ovirt_disk:
+      auth: "{{ ovirt_auth }}"
+      name: "{{ item }}_disk3"
+      vm_name: "{{ item }}"
+      state: attached
+      size: 250GiB
+      storage_domain: vmdata
+      format: cow
+      interface: virtio_scsi
+      wait: true
+    with_items:
+      - app1
+      - app2
+      - app3
+
+  - name: Obtain VM information
+    ovirt_vm_facts:
+      auth: "{{ ovirt_auth }}"
+      pattern: name=master* or name=app* and cluster=Default
+      fetch_nested: true
+      nested_attributes: ips
+
+  - name: Write out a viable hosts file for OCP installation
+    template:
+      src: ../templates/poc-generated_inventory.j2
+      dest: ../output_files/poc-generated_inventory.ini
+
+  - name: Obtain Master1 VM information
+    ovirt_vm_facts:
+      auth: "{{ ovirt_auth }}"
+      pattern: name=master1 and cluster=Default
+      fetch_nested: true
+      nested_attributes: ips
+
+  - name: Set Master1 VM Fact
+    set_fact:
+      ocp_master: "{{ ovirt_vms.0.fqdn }}"
+
+  - name: Add "{{ ocp_master }}" to in memory inventory
+    add_host:
+      name: "{{ ocp_master }}"
+
+  - name: Copy inventory to "{{ ocp_master }}"
+    copy:
+      src: ../output_files/poc-generated_inventory.ini
+      dest: /etc/ansible/hosts
+      owner: root
+      group: root
+      mode: 0644
+    delegate_to: "{{ ocp_master }}"
+
+  - name: Create DNS CNAME record
+    ipa_dnsrecord:
+      ipa_host: ipa1.cloud.chx
+      ipa_pass: "{{ lookup('env','IPA_PASSWORD') }}"
+      ipa_user: admin
+      ipa_timeout: 30
+      validate_certs: false
+      zone_name: "{{ zone_fwd }}"
+      record_name: openshift
+      record_type: 'CNAME'
+      record_value: "{{ ocp_master }}."
+      record_ttl: 3600
+      state: present
+
+  - name: IPA create Wildcard DNS record
+    ipa_dnsrecord:
+      ipa_host: ipa1.cloud.chx
+      ipa_pass: "{{ lookup('env','IPA_PASSWORD') }}"
+      ipa_user: admin
+      ipa_timeout: 30
+      validate_certs: false
+      zone_name: "{{ zone_fwd }}"
+      record_name: '*.osa'
+      record_type: 'CNAME'
+      record_value: "{{ ocp_master }}."
+      record_ttl: 3600
+      state: present
+
+  - name: Update packages via ansible from "{{ ocp_master }}"
+    shell: |
+      ansible all -m shell -a "subscription-manager register --username {{ lookup('env','OREG_AUTH_USER') }} --password {{ lookup('env','OREG_AUTH_PASSWORD') }}"
+      ansible all -m shell -a "subscription-manager attach --pool {{ lookup('env','POOL_ID') }}"
+      ansible all -m shell -a "subscription-manager repos --disable=*"
+      ansible all -m shell -a "subscription-manager repos --enable=rhel-7-server-rpms --enable=rhel-7-server-extras-rpms --enable=rhel-7-server-ose-3.11-rpms --enable=rhel-7-server-ansible-2.6-rpms --enable=rh-gluster-3-client-for-rhel-7-server-rpms"
+      ansible all -m shell -a "yum -y update"
+    delegate_to: "{{ ocp_master }}"
+
+  - name: Running OCP prerequisites from "{{ ocp_master }}"
+    shell: |
+      ansible-playbook /usr/share/ansible/openshift-ansible/playbooks/prerequisites.yml
+    delegate_to: "{{ ocp_master }}"
+
+  - name: Running OCP installer from "{{ ocp_master }}"
+    shell: |
+      ansible-playbook /usr/share/ansible/openshift-ansible/playbooks/deploy_cluster.yml
+    delegate_to: "{{ ocp_master }}"
+
+  - name: Display OCP artifacts from "{{ ocp_master }}"
+    shell: oc get pods --all-namespaces
+    register: ocpoutput
+    delegate_to: "{{ ocp_master }}"
+
+  - debug: var=ocpoutput.stdout_lines
+##
+##

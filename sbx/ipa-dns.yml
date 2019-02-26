@@ -1,0 +1,79 @@
+---
+- hosts: all
+  vars:
+    wildcard_domain: "apps.cloud.chx"
+    zone_fwd: "cloud.chx"
+    zone_rev: "1.168.192.in-addr.arpa"
+  tasks:
+
+  - name: IPA create DNS A record
+    ipa_dnsrecord:
+      ipa_host: ipa1.cloud.chx
+      ipa_pass: "{{ lookup('env','IPA_PASSWORD') }}"
+      ipa_user: admin
+      ipa_timeout: 30
+      validate_certs: false
+      zone_name: "{{ zone_fwd }}"
+      record_name: foo
+      record_type: 'A'
+      record_value: '192.168.1.230'
+      record_ttl: 3600
+      state: present
+  
+  - name: IPA create DNS PTR record
+    ipa_dnsrecord:
+      ipa_host: ipa1.cloud.chx
+      ipa_pass: "{{ lookup('env','IPA_PASSWORD') }}"
+      ipa_user: admin
+      ipa_timeout: 30
+      validate_certs: false
+      zone_name: "{{ zone_rev }}"
+      record_name: '230'
+      record_type: 'PTR'
+      record_value: 'foo.cloud.chx.'
+      record_ttl: 3600
+      state: present
+  
+  - name: IPA create DNS CNAME record
+    ipa_dnsrecord:
+      ipa_host: ipa1.cloud.chx
+      ipa_pass: "{{ lookup('env','IPA_PASSWORD') }}"
+      ipa_user: admin
+      ipa_timeout: 30
+      validate_certs: false
+      zone_name: "{{ zone_fwd }}"
+      record_name: bar
+      record_type: 'CNAME'
+      record_value: 'foo.cloud.chx.'
+      record_ttl: 3600
+      state: present
+  
+  - name: IPA create Wildcard DNS record
+    ipa_dnsrecord:
+      ipa_host: ipa1.cloud.chx
+      ipa_pass: "{{ lookup('env','IPA_PASSWORD') }}"
+      ipa_user: admin
+      ipa_timeout: 30
+      validate_certs: false
+      zone_name: "{{ zone_fwd }}"
+      record_name: '*.wild'
+      record_type: 'CNAME'
+      record_value: 'foo.cloud.chx.'
+      record_ttl: 3600
+      state: present
+
+  - name: IPA change DNS CNAME record
+    ipa_dnsrecord:
+      ipa_host: ipa1.cloud.chx
+      ipa_pass: "{{ lookup('env','IPA_PASSWORD') }}"
+      ipa_user: admin
+      ipa_timeout: 30
+      validate_certs: false
+      zone_name: "{{ zone_fwd }}"
+      record_name: bar
+      record_type: 'CNAME'
+      record_value: 'bazz.cloud.chx.'
+      record_ttl: 3600
+      state: present
+##
+##

@@ -1,0 +1,26 @@
+---
+- hosts: all
+  vars:
+    wildcard_domain: "apps.cloud.chx"
+    lb_fqdn: "ocp.cloud.chx"
+  tasks:
+
+  - import_tasks: ../playbooks/rhev-auth.yml
+
+  - name: Obtain VM information
+    ovirt_vm_facts:
+      auth: "{{ ovirt_auth }}"
+      pattern: name=master* or name=infra* or name=app* and cluster=Default
+      fetch_nested: true
+      nested_attributes: ips
+
+  - name: Write out the template file
+    template:
+      src: ../templates/generated_inventory.j2
+      dest: ../output_files/generated_inventory.ini
+
+      ##- debug:
+          ##msg: "{{ ovirt_vms | ovirtvmipv4(attr='name') }}"
+          ##msg: "{{ ovirt_vms }}"
+##
+##

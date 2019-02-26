@@ -24,6 +24,8 @@
       - lb
 
   - name: Remove generated inventory file
-    shell: rm -f ../output_files/generated_inventory.ini
+    shell: | 
+      rm -f ../output_files/generated_inventory.ini
+      rm -f ../output_files/poc-generated_inventory.ini
 ##
 ##
